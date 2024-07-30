@@ -32,12 +32,12 @@ fn parse_commit(line: &str) -> Option<Commit> {
 }
 
 #[rustfmt::skip]
-fn human(d: Duration) -> String {
+fn print_readable_duration(d: Duration)  {
     let mut n = d.as_secs();
-    if n < 60 { return format!("{n}s"); } n /= 60;
-    if n < 60 { return format!("{n}m"); } n /= 60;
-    if n < 24 { return format!("{n}h"); } n /= 24;
-    if n < 7  { return format!("{n}d"); } format!("{}w", n / 7)
+    if n < 60 { return print!("{n}s") } n /= 60;
+    if n < 60 { return print!("{n}m") } n /= 60;
+    if n < 24 { return print!("{n}h") } n /= 24;
+    if n < 7  { return print!("{n}d") } print!("{}w", n / 7)
 }
 
 fn main() {
@@ -61,7 +61,7 @@ fn main() {
         Ok(v) => v.as_secs(),
         Err(e) => return println!("Error getting system time: {e}"),
     };
-    let elapsed = |secs: u64| human(Duration::from_secs(now - secs));
+    let elapsed = |secs: u64| Duration::from_secs(now - secs);
 
     let mut stdout = std::io::stdout().lock();
 
@@ -82,11 +82,9 @@ fn main() {
             _ => write!(stdout, " {}...", &comment[..MAX_COMMENT_LEN - 3]),
         };
 
-        let _ = write!(
-            stdout,
-            " \x1b[38;5;241m(\x1b[38;5;246m{}\x1b[38;5;241m)\x1b[0m",
-            elapsed(timestamp)
-        );
+        let _ = write!(stdout, " \x1b[38;5;241m(\x1b[38;5;246m");
+        print_readable_duration(elapsed(timestamp));
+        let _ = write!(stdout, "\x1b[38;5;241m)\x1b[0m");
 
         let _ = match refs {
             Some(refs) => writeln!(stdout, " \x1b[37m{refs}\x1b[0m"),

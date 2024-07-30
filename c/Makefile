@@ -1,4 +1,8 @@
 BIN_NAME := git-ln
+INSTALL_DIR := /usr/local/bin
+
+SUDO :=
+SUDO := sudo
 
 current: pdev
 
@@ -12,9 +16,8 @@ dev: build
 
 install:
 	gcc -O3 main.c -o $(BIN_NAME)
-	mkdir -p ~/.local/bin
-	rm -rf ~/.local/bin/$(BIN_NAME)
-	mv $(BIN_NAME) ~/.local/bin/$(BIN_NAME)
+	$(SUDO) rm -rf $(INSTALL_DIR)/$(BIN_NAME)
+	$(SUDO) mv $(BIN_NAME) $(INSTALL_DIR)/$(BIN_NAME)
 
 pdev: install
 	# git -C ~/repos/math ln -n 100

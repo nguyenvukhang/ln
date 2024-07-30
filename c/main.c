@@ -11,15 +11,32 @@
 #define BUF_SIZE 0x200
 
 // surrounding git's colorful refs.
-#define N_PRE_REFS sizeof("\x1b[m \x1b[33m")
-#define N_POST_REFS sizeof("\x1b[m\x1b[33m)\x1b[m")
+#define N_PRE_REFS sizeof("\e[m \e[33m")
+#define N_POST_REFS sizeof("\e[m\e[33m)\e[m")
 
-#define RESET "\x1b[m"
+#define RESET "\e[m"
+#define DARK_GRAY "\e[38;5;240m"
+#define LIGHT_GRAY "\e[38;5;246m"
 
-#define DARK_GRAY "\x1b[38;5;240m"
-#define LIGHT_GRAY "\x1b[38;5;246m"
+#define READ 0
+#define WRITE 1
 
-static int t; // time since unix epoch (in secs)
+#define INIT_PIPE(p)                 \
+  if (pipe(p) < 0) {                 \
+    perror("Unable to start pipe."); \
+    return -1;                       \
+  }
+
+#define CLOSE_DUP(c, d, fno) \
+  close(c);                  \
+  dup2(d, fno);
+
+#define RUN_GIT_LOG                                    \
+  char buf[BUF_SIZE];                                  \
+  for (; fgets(buf, BUF_SIZE, stdin);) send_line(buf); \
+  return 0;
+
+static int t;  // time since unix epoch (in secs)
 
 void print_refs(char *x, int len) {
   Print(DARK_GRAY "{");
@@ -29,116 +46,110 @@ void print_refs(char *x, int len) {
       x += 6;
       Print("*");
       continue;
-    } else if (strncmp(x, "\x1b[33m", 5) == 0) {
-      x[3] = '7'; // yellow -> gray.
+    }
+    if (strncmp(x, "\e[33m", 5) == 0) {
+      x[3] = '7';  // yellow -> gray.
     }
     print(x, 1);
   }
   Print(DARK_GRAY "}");
 }
 
-int print_time(const char *time_str) {
-  int n = t - strtol(time_str, NULL, 10);
+int print_time(const char *time) {
+  int n = t - strtol(time, NULL, 10);
   static char buf[8];
-#define send(l)                                                                \
-  snprintf(buf, 8, "%d", n);                                                   \
-  print(buf, strlen(buf));                                                     \
-  return Print(l);
+#define send(l)                \
+  snprintf(buf, 8, "%d" l, n); \
+  return print(buf, strlen(buf));
   // clang-format off
-  if  (n        < 60) { send("s"); }
-  if ((n /= 60) < 60) { send("m"); }
-  if ((n /= 60) < 24) { send("h"); }
-  if ((n /= 24) < 7)  { send("d"); }
-       n /=  7;         send("w");
+    if  (n        < 60) { send("s"); }
+    if ((n /= 60) < 60) { send("m"); }
+    if ((n /= 60) < 24) { send("h"); }
+    if ((n /= 24) < 7)  { send("d"); }
+         n /=  7;         send("w");
   // clang-format on
 #undef send
 }
 
 int send_line(const char *buf) {
-  const char *graph = buf, *hash;
+  static char *hash, *refs, *comment, *time;
 
-  if (!(hash = strstr(buf, SEP)))
-    return print(buf, strlen(buf));
-  hash += SEP_L;
+  if (!(hash = strstr(buf, SEP))) return print(buf, strlen(buf));
 
-  char *refs = strstr(hash, SEP) + SEP_L;
-  char *comment = strstr(refs, SEP) + SEP_L;
-  char *time_str = strstr(comment, SEP) + SEP_L;
+  refs = strstr((hash += SEP_L), SEP) + SEP_L;
+  comment = strstr(refs, SEP) + SEP_L;
+  time = strstr(comment, SEP) + SEP_L;
 
-  int time = strtol(time_str, NULL, 10), refs_l;
-
-  print(graph, hash - graph - SEP_L);
-  Print("\x1b[33m");
+  print(buf, hash - buf - SEP_L);  // graph visual provided by `--graph`
+  Print("\e[33m");
   print(hash, refs - hash - SEP_L);
   Print(" ");
 
-  if ((refs_l = comment - refs - SEP_L) > 8) {
+  int refs_l = comment - refs - SEP_L;
+  if (refs_l > 8) {
     print_refs(refs + N_PRE_REFS, refs_l - N_PRE_REFS - N_POST_REFS + 1);
     Print(" ");
   }
   Print(RESET);
 
-  print(comment, time_str - comment - SEP_L);
+  print(comment, time - comment - SEP_L);
   Print(DARK_GRAY " (" LIGHT_GRAY);
-  print_time(time_str);
+  print_time(time);
   return Print(DARK_GRAY ")" RESET "\n");
 }
 
 int main(const int argc, const char **argv) {
   t = time(NULL);
+  pid_t p_git = 0, p_writer = 0;
 
-  int p[2]; // [read, write]
-  if (pipe(p) < 0) {
-    perror("Unable to start pipe.");
-    return -1;
+  int p[2], q[2];  // pipes [READ, WRITE]
+
+  INIT_PIPE(p);
+  p_git = fork();
+
+  char has_less = !system("which less > /dev/null 2>&1");
+
+  if (has_less && p_git > 0) {
+    INIT_PIPE(q);
+    p_writer = fork();
   }
 
+  /* At this point we have at most 3 execution threads (p_git, p_writer):
+       (1, 2) => the parent (to pipe to `less`)
+       (1, 0) => the child to spawn a writer
+       (0, 0) => the child to spawn `git log`
+       */
+
   // Start a fork for `git` where it writes to `p[1]`.
-  if (fork() == 0) {
-    close(p[0]);
+  if (p_git == 0) {
     const char *args[argc + 8];
     int i = 0;
 #define ARG(v) args[i++] = v
     ARG("git");
     ARG("log");
-    for (int j = 1; j < argc; j++, i++)
-      args[i] = argv[j];
+    for (int j = 1; j < argc; args[i++] = argv[j++]);
     ARG("--color=always");
     ARG("--graph");
     ARG("--format=" SEP "%h" SEP "%C(auto)%d" SEP "%s" SEP "%at");
     ARG(NULL);
 #undef ARG
-    dup2(p[1], STDOUT_FILENO);
+    CLOSE_DUP(p[READ], p[WRITE], STDOUT_FILENO)
     execvp("git", (char *const *)args);
   }
 
-  close(p[1]);
-  dup2(p[0], STDIN_FILENO);
+  CLOSE_DUP(p[WRITE], p[READ], STDIN_FILENO)
 
   // Process `git`'s output and write it to regular old stdout.
-  if (system("which less > /dev/null 2>&1")) {
-    char buf[BUF_SIZE];
-    for (; fgets(buf, BUF_SIZE, stdin);)
-      send_line(buf);
-    return 0;
-  }
-
-  int q[2]; // [read, write]
-  if (pipe(q) < 0) {
-    perror("Unable to start pipe.");
-    return -1;
+  if (!has_less) {
+    RUN_GIT_LOG
   }
 
   // Process `git`'s output AND send it to `q` to pass to `less`.
-  if (fork() == 0) {
-    char buf[BUF_SIZE];
-    close(q[0]);
-    dup2(q[1], STDOUT_FILENO);
-    for (; fgets(buf, BUF_SIZE, stdin);)
-      send_line(buf);
-    return 0;
+  if (p_writer == 0) {
+    CLOSE_DUP(q[READ], q[WRITE], STDOUT_FILENO)
+    RUN_GIT_LOG
   }
-  dup2(q[0], STDIN_FILENO);
-  close(q[1]);
+
+  CLOSE_DUP(q[WRITE], q[READ], STDIN_FILENO)
   return execlp("less", "less", "-RF", NULL);
 }

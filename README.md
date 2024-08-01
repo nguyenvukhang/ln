@@ -15,3 +15,4 @@ An opinionated `git log` wrapper in 150 lines of C.
 ```
 git ln -n 15 --all
 ```
+![git-ln](https://github.com/user-attachments/assets/c1e10bf0-eb37-4376-8e5d-a5890fe66459)

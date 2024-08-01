@@ -10,10 +10,6 @@
 #define SEP_L (sizeof(SEP) - 1)
 #define BUF_SIZE 0x200
 
-// surrounding git's colorful refs.
-#define N_PRE_REFS sizeof("\e[m \e[33m")
-#define N_POST_REFS sizeof("\e[m\e[33m)\e[m")
-
 #define RESET "\e[m"
 #define DARK_GRAY "\e[38;5;240m"
 #define LIGHT_GRAY "\e[38;5;246m"
@@ -87,7 +83,7 @@ int send_line(const char *buf) {
 
   int refs_l = comment - refs - SEP_L;
   if (refs_l > 8) {
-    print_refs(refs + N_PRE_REFS, refs_l - N_PRE_REFS - N_POST_REFS + 1);
+    print_refs(refs + 8, refs_l - 16);
     Print(" ");
   }
   Print(RESET);
@@ -130,7 +126,7 @@ int main(const int argc, const char **argv) {
     for (int j = 1; j < argc; args[i++] = argv[j++]);
     ARG("--color=always");
     ARG("--graph");
-    ARG("--format=" SEP "%h" SEP "%C(auto)%d" SEP "%s" SEP "%at");
+    ARG("--format=" SEP "%h" SEP "%C(auto)%D" SEP "%s" SEP "%at");
     ARG(NULL);
 #undef ARG
     CLOSE_DUP(p[READ], p[WRITE], STDOUT_FILENO)

@@ -6,7 +6,7 @@ SUDO := sudo # disable if needed by swapping the SUDO lines.
 
 GIT_TEST_ARGS := -C /Users/khang/repos/math
 
-current: pdev
+current: test
 
 build:
 	gcc main.c -o $(BIN_NAME)

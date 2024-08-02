@@ -4,7 +4,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#define print(text, len) fwrite(text, sizeof(char), len, stdout)
+#define OUTPUT stdout
+#define print(text, len) fwrite(text, sizeof(char), len, OUTPUT)
 #define Print(text) print(text, sizeof(text) - 1)
 #define SEP ",.;:"
 #define SEP_L (sizeof(SEP) - 1)
@@ -53,18 +54,12 @@ void print_refs(char *x, int len) {
 
 int print_time(const char *time) {
   int n = t - strtol(time, NULL, 10);
-  static char buf[8];
-#define send(l)                \
-  snprintf(buf, 8, "%d" l, n); \
-  return print(buf, strlen(buf));
-  // clang-format off
-    if  (n        < 60) { send("s"); }
-    if ((n /= 60) < 60) { send("m"); }
-    if ((n /= 60) < 24) { send("h"); }
-    if ((n /= 24) < 7)  { send("d"); }
-         n /=  7;         send("w");
-  // clang-format on
+#define send(m, l)                              \
+  if (n < m) return fprintf(OUTPUT, "%d" l, n); \
+  else n /= m;
+  send(60, "s") send(60, "m") send(24, "h") send(7, "d");
 #undef send
+  return fprintf(OUTPUT, "%dw", n);
 }
 
 int send_line(const char *buf) {
@@ -123,7 +118,7 @@ int main(const int argc, const char **argv) {
 #define ARG(v) args[i++] = v
     ARG("git");
     ARG("log");
-    for (int j = 1; j < argc; args[i++] = argv[j++]);
+    for (int j = 1; j < argc; ARG(argv[j++]));
     ARG("--color=always");
     ARG("--graph");
     ARG("--format=" SEP "%h" SEP "%C(auto)%D" SEP "%s" SEP "%at");

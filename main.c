@@ -7,8 +7,9 @@
 #define OUTPUT stdout
 #define print(text, len) fwrite(text, sizeof(char), len, OUTPUT)
 #define Print(text) print(text, sizeof(text) - 1)
-#define SEP ",.;:"
-#define SEP_L (sizeof(SEP) - 1)
+#define TTY_Print(t, f) IS_ATTY ? Print(t) : Print(f)
+#define SP ";-;_"
+#define SP_L (sizeof(SP) - 1)
 #define BUF_SIZE 0x200
 
 #define RESET "\e[m"
@@ -24,9 +25,9 @@
     return -1;                       \
   }
 
-#define CLOSE_DUP(c, d, fno) \
-  close(c);                  \
-  dup2(d, fno);
+#define CLOSE_DUP(c, d, f) \
+  close(c);                \
+  dup2(d, f);
 
 #define RUN_GIT_LOG                                    \
   char buf[BUF_SIZE];                                  \
@@ -34,9 +35,10 @@
   return 0;
 
 static int t;  // time since unix epoch (in secs)
+static int IS_ATTY;
 
 void print_refs(char *x, int len) {
-  Print(DARK_GRAY "{");
+  TTY_Print(DARK_GRAY "{", "{");
   for (int i = 0; i < len; i++, x++) {
     if (strncmp(x, "origin", 6) == 0) {
       i += 6;
@@ -44,12 +46,10 @@ void print_refs(char *x, int len) {
       Print("*");
       continue;
     }
-    if (strncmp(x, "\e[33m", 5) == 0) {
-      x[3] = '7';  // yellow -> gray.
-    }
+    if (strncmp(x, "\e[33m", 5) == 0) x[3] = '7';  // yellow -> gray.
     print(x, 1);
   }
-  Print(DARK_GRAY "}");
+  TTY_Print(DARK_GRAY "} ", "} ");
 }
 
 int print_time(const char *time) {
@@ -65,32 +65,31 @@ int print_time(const char *time) {
 int send_line(const char *buf) {
   static char *hash, *refs, *comment, *time;
 
-  if (!(hash = strstr(buf, SEP))) return print(buf, strlen(buf));
+  if (!(hash = strstr(buf, SP))) return print(buf, strlen(buf));
 
-  refs = strstr((hash += SEP_L), SEP) + SEP_L;
-  comment = strstr(refs, SEP) + SEP_L;
-  time = strstr(comment, SEP) + SEP_L;
+  refs = strstr((hash += SP_L), SP) + SP_L;
+  comment = strstr(refs, SP) + SP_L;
+  time = strstr(comment, SP) + SP_L;
 
-  print(buf, hash - buf - SEP_L);  // graph visual provided by `--graph`
-  Print("\e[33m");
-  print(hash, refs - hash - SEP_L);
+  print(buf, hash - buf - SP_L);  // graph visual provided by `--graph`
+  if (IS_ATTY) Print("\e[33m");
+  print(hash, refs - hash - SP_L);
   Print(" ");
 
-  int refs_l = comment - refs - SEP_L;
-  if (refs_l > 8) {
-    print_refs(refs + 8, refs_l - 16);
-    Print(" ");
-  }
-  Print(RESET);
+  int refs_l = comment - refs - SP_L;
+  if (refs_l > 2 + 6 * IS_ATTY)
+    print_refs(refs + 8 * IS_ATTY, refs_l - 16 * IS_ATTY);
+  if (IS_ATTY) Print(RESET);
 
-  print(comment, time - comment - SEP_L);
-  Print(DARK_GRAY " (" LIGHT_GRAY);
+  print(comment, time - comment - SP_L);
+  TTY_Print(DARK_GRAY " (" LIGHT_GRAY, " (");
   print_time(time);
-  return Print(DARK_GRAY ")" RESET "\n");
+  return TTY_Print(DARK_GRAY ")" RESET "\n", ")\n");
 }
 
 int main(const int argc, const char **argv) {
   t = time(NULL);
+  IS_ATTY = isatty(STDOUT_FILENO);
   pid_t p_git = 0, p_writer = 0;
 
   int p[2], q[2];  // pipes [READ, WRITE]
@@ -110,6 +109,8 @@ int main(const int argc, const char **argv) {
        (1, 0) => the child to spawn a writer
        (0, 0) => the child to spawn `git log`
        */
+#define FMT_ARGS SP "%h" SP "%D" SP "%s" SP "%at"
+#define FMT_ARGS_COLORED SP "%h" SP "%C(auto)%D" SP "%s" SP "%at"
 
   // Start a fork for `git` where it writes to `p[1]`.
   if (p_git == 0) {
@@ -119,9 +120,9 @@ int main(const int argc, const char **argv) {
     ARG("git");
     ARG("log");
     for (int j = 1; j < argc; ARG(argv[j++]));
-    ARG("--color=always");
+    if (IS_ATTY) ARG("--color=always");
+    IS_ATTY ? (ARG("--format=" FMT_ARGS_COLORED)) : (ARG("--format=" FMT_ARGS));
     ARG("--graph");
-    ARG("--format=" SEP "%h" SEP "%C(auto)%D" SEP "%s" SEP "%at");
     ARG(NULL);
 #undef ARG
     CLOSE_DUP(p[READ], p[WRITE], STDOUT_FILENO)

@@ -22,4 +22,4 @@ dev: build
 	$(BIN_NAME) -n 20 --all
 
 test: install
-	git $(GIT_TEST_ARGS) ln -n 20 --all
+	git $(GIT_TEST_ARGS) ln -n 30 --all

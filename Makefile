@@ -4,9 +4,11 @@ INSTALL_DIR := /usr/local/bin
 SUDO :=
 SUDO := sudo # disable if needed by swapping the SUDO lines.
 
-GIT_TEST_ARGS := -C /Users/khang/repos/math
+GIT_TEST_ARGS := -C ~/repos/math
 
 current: test
+	# make test > log
+	# nvim log
 
 build:
 	gcc main.c -o $(BIN_NAME)

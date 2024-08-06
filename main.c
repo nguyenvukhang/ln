@@ -77,8 +77,7 @@ int send_line(const char *buf) {
   Print(" ");
 
   int refs_l = comment - refs - SP_L;
-  if (refs_l > 2 + 6 * IS_ATTY)
-    print_refs(refs + 8 * IS_ATTY, refs_l - 16 * IS_ATTY);
+  if (refs_l > 3 + 6 * IS_ATTY) print_refs(refs, refs_l);
   if (IS_ATTY) Print(RESET);
 
   print(comment, time - comment - SP_L);

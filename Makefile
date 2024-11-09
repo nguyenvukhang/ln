@@ -1,14 +1,19 @@
+MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+MAKEFILE_DIR  := $(dir $(MAKEFILE_PATH))
+
 BIN_NAME := git-ln
 INSTALL_DIR := /usr/local/bin
+
+PATH := $(MAKEFILE_DIR):$(PATH)
 
 SUDO :=
 SUDO := sudo # disable if needed by swapping the SUDO lines.
 
+GIT_TEST_ARGS := 
+GIT_TEST_ARGS := -C ~/repos/gitnu
 GIT_TEST_ARGS := -C ~/repos/math
 
 current: test
-	# make test > log
-	# nvim log
 
 build:
 	gcc main.c -o $(BIN_NAME)
@@ -23,5 +28,5 @@ install: build-release
 dev: build
 	$(BIN_NAME) -n 20 --all
 
-test: install
-	git $(GIT_TEST_ARGS) ln -n 30 --all
+test: build
+	git $(GIT_TEST_ARGS) ln -n 100 --all

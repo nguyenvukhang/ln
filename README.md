@@ -1,6 +1,6 @@
 # `ln`
 
-An opinionated `git log` wrapper in 150 lines of C.
+An opinionated `git log` wrapper in 200 lines of C.
 
 > Effectively passes extra args to `git log` and does some aesthetic processing
 > on its output.  

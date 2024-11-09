@@ -1,146 +1,211 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 
-#define OUTPUT stdout
-#define print(text, len) fwrite(text, sizeof(char), len, OUTPUT)
-#define Print(text) print(text, sizeof(text) - 1)
-#define TTY_Print(t, f) IS_ATTY ? Print(t) : Print(f)
-#define SP ";-;_"
-#define SP_L (sizeof(SP) - 1)
-#define BUF_SIZE 0x200
+#define DEBUG
 
+#define sp ''  // separator character
+#define SP ""  // separator string
+
+#define S(x) x, sizeof(x) - 1
+#define BUF_SIZE 512
+#define fwrite_literal(x) fwrite(S(x), 1, stdout);
+#define fwrite1(x, y) fwrite(x, y, 1, stdout);
+
+// Colors
 #define RESET "\e[m"
+#define YELLOW "\e[33m"
 #define DARK_GRAY "\e[38;5;240m"
 #define LIGHT_GRAY "\e[38;5;246m"
 
 #define READ 0
 #define WRITE 1
 
-#define INIT_PIPE(p)                 \
-  if (pipe(p) < 0) {                 \
-    perror("Unable to start pipe."); \
-    return -1;                       \
+// Tell the compiler that x is unlikely to be true.
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
+#define exit_perror(msg, action) \
+  {                              \
+    perror(msg);                 \
+    action;                      \
   }
 
-#define CLOSE_DUP(c, d, f) \
-  close(c);                \
-  dup2(d, f);
+static inline void print_refs(char *refs) {
+  char *v = refs;
+  for (char *x = refs; *x != sp; *(v++) = *(x++)) {
+    if (strncmp(x, S("origin")) == 0) {
+      x += 6, *(v++) = '*';
+    } else if (strncmp(x, S("\e[33m")) == 0) x[3] = '7';  // yellow -> gray.
+  }
+  fwrite1(refs, v - refs);
+}
 
-#define RUN_GIT_LOG                                    \
-  char buf[BUF_SIZE];                                  \
-  for (; fgets(buf, BUF_SIZE, stdin);) send_line(buf); \
-  return 0;
+// v should be a pointer to the start of the sp-terminated date string.
+// we aim to print only the first letter of the english bit.
+static inline void print_relative_date(char *v) {
+  // fwrite1(date, strchr(date, sp) - date - 1);
+  // return;
+  char *x = strchr(v, ' ');
+  if (*(x + 1) == 'm' && *(x + 2) == 'o') *x = 'M';  // month -> M
+  else *x = *(x + 1);
+  fwrite1(v, x - v + 1);
+}
 
-static int t;  // time since unix epoch (in secs)
-static int IS_ATTY;
+// First `SP` is necessary to isolate out graph visuals
+// order is <time> <hash> <commit message> <refs>
+// %h  | abbreviated commit hash
+// %ar | author date, relative
+// %s  | subject
+// %D  | ref names without the " (", ")" wrapping.
+#define FMT_ARGS________ SP "%h %ar" SP "%s" SP "%D" SP
+#define FMT_ARGS_COLORED SP "%h %ar" SP "%s" SP "%C(auto)%D" SP
 
-void print_refs(char *x, int len) {
-  TTY_Print(DARK_GRAY "{", "{");
-  for (int i = 0; i < len; i++, x++) {
-    if (strncmp(x, "origin", 6) == 0) {
-      i += 6;
-      x += 6;
-      Print("*");
+typedef struct {
+  char *hash, *date, *subject, *refs;
+  short reflen;
+} commit;
+
+// We're not gonna check for nullptrs here because life's too short. Just make
+// sure the `--format` flag of `git-log` is properly checked, and we're gucci.
+void print_git_log_line_colored(commit c) {
+  // Print the commit hash.
+  fwrite_literal(YELLOW);
+  fwrite1(c.hash, c.date - c.hash);
+  fwrite_literal(RESET);
+
+  // Print the refs. (branches/tags/etc.)
+  if (unlikely(c.reflen > 5)) { /* Print the refs with color */
+    fwrite_literal(DARK_GRAY "{");
+    print_refs(c.refs);
+    fwrite_literal(DARK_GRAY "} " RESET);
+  }
+
+  // Print the subject.
+  fwrite1(c.subject, c.refs - c.subject - 1);
+
+  // Print the relative time.
+  fwrite_literal(DARK_GRAY " (" LIGHT_GRAY);
+  print_relative_date(c.date);
+  fwrite_literal(DARK_GRAY ")" RESET "\n");
+}
+
+// We're not gonna check for nullptrs here because life's too short. Just make
+// sure the `--format` flag of `git-log` is properly checked, and we're gucci.
+void print_git_log_line_uncolored(commit c) {
+  // Print the commit hash.
+  fwrite1(c.hash, c.date - c.hash);
+
+  // Print the refs. (branches/tags/etc.)
+  if (unlikely(c.reflen > 0)) { /* Print the refs with color */
+    fwrite_literal("{");
+    print_refs(c.refs);
+    fwrite_literal("} ");
+  }
+
+  // Print the subject.
+  fwrite1(c.subject, c.refs - c.subject - 1);
+
+  // Print the relative time.
+  fwrite_literal(" (");
+  print_relative_date(c.date);
+  fwrite_literal(")\n");
+}
+
+void print_git_log(int pipe, char is_atty) {
+  FILE *fd = fdopen(pipe, "r");
+  if (fd == NULL) exit_perror("fdopen on read-end failed.", return);
+
+  commit c;
+
+  void (*printer)(commit) =
+      is_atty ? &print_git_log_line_colored : print_git_log_line_uncolored;
+
+  for (char line[256], *p; fgets(line, sizeof(line), fd) != NULL;) {
+    c.hash = strchr(line, sp);
+
+    // This line is just the graph visual.
+    if (unlikely(c.hash == NULL)) {
+      fwrite1(line, strlen(line));
       continue;
+    } else {
+      // Print the graph visual.
+      fwrite1(line, c.hash - line);
     }
-    if (strncmp(x, "\e[33m", 5) == 0) x[3] = '7';  // yellow -> gray.
-    print(x, 1);
+
+    c.date = strchr(++c.hash, ' ') + 1;
+    c.subject = strchr(c.date, sp) + 1;
+    c.refs = strchr(c.subject, sp) + 1;
+    c.reflen = strchr(c.refs, sp) - c.refs;
+
+    printer(c);
   }
-  TTY_Print(DARK_GRAY "} ", "} ");
-}
-
-int print_time(const char *time) {
-  int n = t - strtol(time, NULL, 10);
-#define send(m, l)                              \
-  if (n < m) return fprintf(OUTPUT, "%d" l, n); \
-  else n /= m;
-  send(60, "s") send(60, "m") send(24, "h") send(7, "d");
-#undef send
-  return fprintf(OUTPUT, "%dw", n);
-}
-
-int send_line(const char *buf) {
-  static char *hash, *refs, *comment, *time;
-
-  if (!(hash = strstr(buf, SP))) return print(buf, strlen(buf));
-
-  refs = strstr((hash += SP_L), SP) + SP_L;
-  comment = strstr(refs, SP) + SP_L;
-  time = strstr(comment, SP) + SP_L;
-
-  print(buf, hash - buf - SP_L);  // graph visual provided by `--graph`
-  if (IS_ATTY) Print("\e[33m");
-  print(hash, refs - hash - SP_L);
-  Print(" ");
-
-  int refs_l = comment - refs - SP_L;
-  if (refs_l > 3 + 6 * IS_ATTY) print_refs(refs, refs_l);
-  if (IS_ATTY) Print(RESET);
-
-  print(comment, time - comment - SP_L);
-  TTY_Print(DARK_GRAY " (" LIGHT_GRAY, " (");
-  print_time(time);
-  return TTY_Print(DARK_GRAY ")" RESET "\n", ")\n");
 }
 
 int main(const int argc, const char **argv) {
-  t = time(NULL);
-  IS_ATTY = isatty(STDOUT_FILENO);
-  pid_t p_git = 0, p_writer = 0;
+  const char IS_ATTY = isatty(STDOUT_FILENO) ? 1 : 0;
 
-  int p[2], q[2];  // pipes [READ, WRITE]
+  int p_log[2];
 
-  INIT_PIPE(p);
-  p_git = fork();
+  if (pipe(p_log)) exit_perror("Unable to start pipe.", return 1);
 
-  char has_less = !system("which less > /dev/null 2>&1");
+  switch (fork()) {
+    case -1:
+      exit_perror("Fork failed.", return 1);
+    case 0: {  // Child process: run `git log`.
+      const char *args[argc + 5];
+      args[0] = "git", args[1] = "log";
 
-  if (has_less && p_git > 0) {
-    INIT_PIPE(q);
-    p_writer = fork();
+      // Copy the remaining arguments over to `args`.
+      memcpy(args + 2, argv + 1, (argc - 1) * sizeof(char *));
+
+      // Core git-ln flavors.
+      args[argc + 1] = "--graph";
+      if (IS_ATTY) {
+        args[argc + 2] = "--format=" FMT_ARGS_COLORED;
+        args[argc + 3] = "--color=always";
+        args[argc + 4] = NULL;
+      } else {
+        args[argc + 2] = "--format=" FMT_ARGS________;
+        args[argc + 3] = NULL;
+      }
+
+      close(p_log[READ]);
+      dup2(p_log[WRITE], STDOUT_FILENO);
+      execvp("git", (char **)args);
+    }
+    default: {  // Parent process.
+      close(p_log[WRITE]);
+
+#ifdef DEBUG  // in debug mode, just print git log.
+      print_git_log(p_log[READ], IS_ATTY);
+      return 0;
+#endif
+
+      if (!system("which less > /dev/null 2>&1")) { /* `less` isn't installed */
+        print_git_log(p_log[READ], IS_ATTY);
+      } else { /* `less` is installed */
+        int p_less[2];
+        if (pipe(p_less)) exit_perror("Unable to start pipe.", return 1);
+        switch (fork()) {
+          case -1:
+            exit_perror("Fork failed.", return 1);
+          case 0: {  // Child process: run the printer.
+            close(p_less[READ]);
+            dup2(p_less[WRITE], STDOUT_FILENO);
+            print_git_log(p_log[READ], IS_ATTY);
+            break;
+          }
+          default: {  // Parent process. We choose to run `less` with the parent
+                      // because we want to hand back control to the TTY with
+                      // `less` in the foreground.
+            close(p_less[WRITE]);
+            dup2(p_less[READ], STDIN_FILENO);
+            execlp("less", "less", "-RF", NULL);
+          }
+        }
+      }
+      return 0;
+    }
   }
-
-  /* At this point we have at most 3 execution threads (p_git, p_writer):
-       (1, 2) => the parent (to pipe to `less`)
-       (1, 0) => the child to spawn a writer
-       (0, 0) => the child to spawn `git log`
-       */
-#define FMT_ARGS SP "%h" SP "%D" SP "%s" SP "%at"
-#define FMT_ARGS_COLORED SP "%h" SP "%C(auto)%D" SP "%s" SP "%at"
-
-  // Start a fork for `git` where it writes to `p[1]`.
-  if (p_git == 0) {
-    const char *args[argc + 8];
-    int i = 0;
-#define ARG(v) args[i++] = v
-    ARG("git");
-    ARG("log");
-    for (int j = 1; j < argc; ARG(argv[j++]));
-    if (IS_ATTY) ARG("--color=always");
-    IS_ATTY ? (ARG("--format=" FMT_ARGS_COLORED)) : (ARG("--format=" FMT_ARGS));
-    ARG("--graph");
-    ARG(NULL);
-#undef ARG
-    CLOSE_DUP(p[READ], p[WRITE], STDOUT_FILENO)
-    execvp("git", (char *const *)args);
-  }
-
-  CLOSE_DUP(p[WRITE], p[READ], STDIN_FILENO)
-
-  // Process `git`'s output and write it to regular old stdout.
-  if (!has_less) {
-    RUN_GIT_LOG
-  }
-
-  // Process `git`'s output AND send it to `q` to pass to `less`.
-  if (p_writer == 0) {
-    CLOSE_DUP(q[READ], q[WRITE], STDOUT_FILENO)
-    RUN_GIT_LOG
-  }
-
-  CLOSE_DUP(q[WRITE], q[READ], STDIN_FILENO)
-  return execlp("less", "less", "-RF", NULL);
 }

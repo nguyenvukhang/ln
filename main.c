@@ -155,29 +155,26 @@ int main(const int argc, const char **argv) {
   switch (fork()) {
     case -1:
       exit_perror("Fork failed.", return 1);
-    case 0: {  // Child process: run `git log`.
-      const char *args[argc + 5];
-      args[0] = "git", args[1] = "log";
-
-      // Copy the remaining arguments over to `args`.
-      memcpy(args + 2, argv + 1, (argc - 1) * sizeof(char *));
-
-      // Core git-ln flavors.
-      args[argc + 1] = "--graph";
+    case 0:  // Child process: run `git log`
+    {
+      *(argv - 1) = "git";  // segfault gamble #1
+      *argv = "log";
+      // Note that other argument in `argv` will be passed on directly to `git`.
+      argv[argc] = "--graph";
       if (IS_ATTY) {
-        args[argc + 2] = "--format=" FMT_ARGS_COLORED;
-        args[argc + 3] = "--color=always";
-        args[argc + 4] = NULL;
+        argv[argc + 1] = "--format=" FMT_ARGS_COLORED;  // segfault gamble #2
+        argv[argc + 2] = "--color=always";              // segfault gamble #3
+        argv[argc + 3] = NULL;                          // segfault gamble #4
       } else {
-        args[argc + 2] = "--format=" FMT_ARGS________;
-        args[argc + 3] = NULL;
+        argv[argc + 1] = "--format=" FMT_ARGS________;  // segfault gamble #5
+        argv[argc + 2] = NULL;                          // segfault gamble #6
       }
-
       close(p_log[READ]);
       dup2(p_log[WRITE], STDOUT_FILENO);
-      execvp("git", (char **)args);
+      execvp("git", (char **)(argv - 1));  // same as segfault gamble #1
     }
-    default: {  // Parent process.
+    default:  // Parent process.
+    {
       close(p_log[WRITE]);
 
 #ifdef DEBUG  // in debug mode, just print git log.

@@ -3,13 +3,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#define DEBUG
+// #define DEBUG
 
 #define sp ''  // separator character
 #define SP ""  // separator string
 
 #define S(x) x, sizeof(x) - 1
-#define BUF_SIZE 512
 #define fwrite_literal(x) fwrite(S(x), 1, stdout);
 #define fwrite1(x, y) fwrite(x, y, 1, stdout);
 
@@ -58,17 +57,19 @@ static inline void print_relative_date(char *v) {
 // %ar | author date, relative
 // %s  | subject
 // %D  | ref names without the " (", ")" wrapping.
-#define FMT_ARGS________ SP "%h %ar" SP "%s" SP "%D" SP
-#define FMT_ARGS_COLORED SP "%h %ar" SP "%s" SP "%C(auto)%D" SP
+#define FMT_ARGS________ SP "%h %ar" SP "%<(80,trunc)%s %D" SP
+#define FMT_ARGS_COLORED SP "%h %ar" SP "%<(80,trunc)%s %C(auto)%D" SP
 
 typedef struct {
   char *hash, *date, *subject, *refs;
-  short reflen;
+  short reflen, subjlen;
 } commit;
+
+static commit c;
 
 // We're not gonna check for nullptrs here because life's too short. Just make
 // sure the `--format` flag of `git-log` is properly checked, and we're gucci.
-void print_git_log_line_colored(commit c) {
+void print_git_log_line_colored() {
   // Print the commit hash.
   fwrite_literal(YELLOW);
   fwrite1(c.hash, c.date - c.hash);
@@ -82,17 +83,17 @@ void print_git_log_line_colored(commit c) {
   }
 
   // Print the subject.
-  fwrite1(c.subject, c.refs - c.subject - 1);
+  fwrite1(c.subject, c.subjlen + 1);
 
   // Print the relative time.
-  fwrite_literal(DARK_GRAY " (" LIGHT_GRAY);
+  fwrite_literal(DARK_GRAY "(" LIGHT_GRAY);
   print_relative_date(c.date);
   fwrite_literal(DARK_GRAY ")" RESET "\n");
 }
 
 // We're not gonna check for nullptrs here because life's too short. Just make
 // sure the `--format` flag of `git-log` is properly checked, and we're gucci.
-void print_git_log_line_uncolored(commit c) {
+void print_git_log_line_uncolored() {
   // Print the commit hash.
   fwrite1(c.hash, c.date - c.hash);
 
@@ -104,10 +105,10 @@ void print_git_log_line_uncolored(commit c) {
   }
 
   // Print the subject.
-  fwrite1(c.subject, c.refs - c.subject - 1);
+  fwrite1(c.subject, c.subjlen + 1);
 
   // Print the relative time.
-  fwrite_literal(" (");
+  fwrite_literal("(");
   print_relative_date(c.date);
   fwrite_literal(")\n");
 }
@@ -116,12 +117,10 @@ void print_git_log(int pipe, char is_atty) {
   FILE *fd = fdopen(pipe, "r");
   if (fd == NULL) exit_perror("fdopen on read-end failed.", return);
 
-  commit c;
-
-  void (*printer)(commit) =
+  void (*printer)() =
       is_atty ? &print_git_log_line_colored : print_git_log_line_uncolored;
 
-  for (char line[256], *p; fgets(line, sizeof(line), fd) != NULL;) {
+  for (char line[512], *p; fgets(line, sizeof(line), fd) != NULL;) {
     c.hash = strchr(line, sp);
 
     // This line is just the graph visual.
@@ -135,10 +134,14 @@ void print_git_log(int pipe, char is_atty) {
 
     c.date = strchr(++c.hash, ' ') + 1;
     c.subject = strchr(c.date, sp) + 1;
-    c.refs = strchr(c.subject, sp) + 1;
+
+    c.subjlen = 80;
+    while (c.subject[c.subjlen - 1] == ' ') c.subjlen--;
+
+    c.refs = c.subject + 81;
     c.reflen = strchr(c.refs, sp) - c.refs;
 
-    printer(c);
+    printer();
   }
 }
 
@@ -182,7 +185,7 @@ int main(const int argc, const char **argv) {
       return 0;
 #endif
 
-      if (!system("which less > /dev/null 2>&1")) { /* `less` isn't installed */
+      if (system("which less > /dev/null 2>&1")) { /* `less` isn't installed */
         print_git_log(p_log[READ], IS_ATTY);
       } else { /* `less` is installed */
         int p_less[2];

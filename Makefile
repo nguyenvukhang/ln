@@ -12,6 +12,7 @@ SUDO := sudo # disable if needed by swapping the SUDO lines.
 GIT_TEST_ARGS := 
 GIT_TEST_ARGS := -C ~/repos/gitnu
 GIT_TEST_ARGS := -C ~/repos/math
+GIT_TEST_ARGS := -C ~/v/cachelib/cachelib/external/glog
 
 current: test
 
@@ -29,4 +30,4 @@ dev: build
 	$(BIN_NAME) -n 20 --all
 
 test: build
-	git $(GIT_TEST_ARGS) ln -n 100 --all
+	git $(GIT_TEST_ARGS) ln

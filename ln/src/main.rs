@@ -1,8 +1,9 @@
+use crossterm::terminal;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 
-macro_rules!write  {($f:ident,$($x:tt)+)=>{std::write  !($f,$($x),*).unwrap()}}
-macro_rules!writeln{($f:ident,$($x:tt)+)=>{std::writeln!($f,$($x),*).unwrap()}}
+macro_rules!write  {($f:ident,$($x:tt)+)=>{{let _=std::write  !($f,$($x),*);}}}
+macro_rules!writeln{($f:ident,$($x:tt)+)=>{{let _=std::writeln!($f,$($x),*);}}}
 
 const GRAY1: &str = "\x1b[38;5;240m";
 const GRAY0: &str = "\x1b[38;5;246m";
@@ -43,7 +44,28 @@ fn handle_git_log_stdout_line<W: Write>(line: &str, mut f: W) {
 }
 
 /// Iterates over the git log and writes the outputs to `f`.
+fn bounded_run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
+    let (_, lines) = terminal::size().unwrap();
+    let mut j = lines * 3 / 5; // bound it to 60% screen height.
+    let mut buffer = String::with_capacity(256);
+
+    while j > 0 {
+        buffer.clear();
+        let line = match git_log.read_line(&mut buffer) {
+            Ok(0) | Err(_) => break,
+            _ => buffer.trim_end(),
+        };
+        handle_git_log_stdout_line(line, &mut target);
+        j -= 1;
+    }
+}
+
+/// Iterates over the git log and writes the outputs to `f`.
 fn run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
+    // No limit is specified (very hard-coded, such naive)
+    if !std::env::args().any(|v| v == "-n") {
+        return bounded_run(git_log, target);
+    }
     let mut buffer = String::with_capacity(256);
     loop {
         buffer.clear();

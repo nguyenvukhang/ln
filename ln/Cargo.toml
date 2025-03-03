@@ -12,3 +12,6 @@ opt-level = "z"
 strip = "symbols"
 codegen-units = 1
 lto = "fat"
+
+[dependencies]
+crossterm = "0.28.1"

@@ -11,6 +11,9 @@ const GRAY0: &str = "\x1b[38;5;246m";
 const SP: &str = "\u{2}";
 const FMT_ARGS: [&str; 4] = ["%h", "%ar", "%s", "%C(auto)%D"];
 
+static mut IS_BOUNDED: bool = false;
+const HEIGHT_RATIO: f32 = 0.6;
+
 /// parse for `sha`, `time`, `subject`, `refs`.
 #[inline]
 fn parse_line(line: &str) -> (&str, &str, &str, &str) {
@@ -46,7 +49,7 @@ fn handle_git_log_stdout_line<W: Write>(line: &str, mut f: W) {
 /// Iterates over the git log and writes the outputs to `f`.
 fn bounded_run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
     let (_, lines) = terminal::size().unwrap();
-    let mut j = lines * 3 / 5; // bound it to 60% screen height.
+    let mut j = (lines as f32 * HEIGHT_RATIO) as u16;
     let mut buffer = String::with_capacity(256);
 
     while j > 0 {
@@ -63,7 +66,7 @@ fn bounded_run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
 /// Iterates over the git log and writes the outputs to `f`.
 fn run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
     // No limit is specified (very hard-coded, such naive)
-    if !std::env::args().any(|v| v == "-n") {
+    if unsafe { IS_BOUNDED } {
         return bounded_run(git_log, target);
     }
     let mut buffer = String::with_capacity(256);
@@ -79,9 +82,9 @@ fn run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
 
 /// Gets the `git log` command. Forwards all arguments passed to this
 /// binary on to `git log`.
-fn git_log() -> Command {
+fn git_log(args: Vec<String>) -> Command {
     let mut git = Command::new("git");
-    git.arg("log").args(std::env::args().skip(1)).arg("--graph");
+    git.arg("log").args(args).arg("--graph");
     git.arg(format!("--format={SP}{}", FMT_ARGS.join(SP)));
     git.arg("--color=always");
     git.stdout(Stdio::piped());
@@ -100,7 +103,14 @@ fn less() -> Command {
 /// Here, we operate under the assumption that we ARE using this in a
 /// tty context, and hence always have color on.
 fn main() {
-    let git_log = git_log().spawn().unwrap().stdout.take().unwrap();
+    let mut args = Vec::with_capacity(8);
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--bound" => unsafe { IS_BOUNDED = true },
+            _ => args.push(arg),
+        }
+    }
+    let git_log = git_log(args).spawn().unwrap().stdout.take().unwrap();
     let git_log = BufReader::new(git_log);
 
     let Ok(mut less) = less().spawn() else {

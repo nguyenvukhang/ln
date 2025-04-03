@@ -1,4 +1,8 @@
-use std::process::{Command, Stdio};
+use std::{
+    collections::HashSet,
+    path::PathBuf,
+    process::{Command, Stdio},
+};
 
 macro_rules! FMT {
     ($($x:expr),*) => {
@@ -56,4 +60,21 @@ pub fn less() -> Command {
     let mut less = Command::new("less");
     less.arg("-RF").stdin(Stdio::piped());
     less
+}
+
+/// Gets the base `git log` command.
+pub fn git_dir() -> PathBuf {
+    let mut git = Command::new("git");
+    let out = git.args(["rev-parse", "--git-dir"]).output().unwrap();
+    PathBuf::from(std::str::from_utf8(&out.stdout).unwrap().trim())
+}
+
+pub fn verified_shas() -> Option<HashSet<String>> {
+    let v_file = git_dir().join(".verified");
+    let Ok(v_content) = std::fs::read_to_string(v_file) else { return None };
+    let mut set = HashSet::new();
+    for line in v_content.lines() {
+        set.insert(line.to_string());
+    }
+    Some(set)
 }

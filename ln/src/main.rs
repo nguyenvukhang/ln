@@ -56,6 +56,7 @@ fn run<R: BufRead, W: Write>(is_bounded: bool, mut log: R, mut target: W) {
 /// Here, we operate under the assumption that we ARE using this in a
 /// tty context, and hence always have color on.
 fn main() {
+    println!("{:?}", cmd::git_dir());
     let mut git_log = cmd::git_log();
     git_log.stdout(Stdio::piped());
 

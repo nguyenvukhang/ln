@@ -21,11 +21,22 @@ pub fn git_log() -> Command {
 /// %D  : ref names without the " (", ")" wrapping.
 const FMT_ARGS: &str = FMT!("%h", "%ar", "%s", "%C(auto)%D");
 
-/// parse for `sha`, `time`, `subject`, `refs`.
-#[inline]
-pub fn parse_line(line: &str) -> (&str, &str, &str, &str) {
-    let mut z = line.split(SP);
-    (z.next().unwrap(), z.next().unwrap(), z.next().unwrap(), z.next().unwrap())
+pub struct LogLine<'a> {
+    pub sha: &'a str,
+    pub time: &'a str,
+    pub subj: &'a str,
+    pub refs: &'a str,
+}
+impl<'a> From<&'a str> for LogLine<'a> {
+    fn from(z: &'a str) -> Self {
+        let mut z = z.split(SP);
+        Self {
+            sha: z.next().unwrap(),
+            time: z.next().unwrap(),
+            subj: z.next().unwrap(),
+            refs: z.next().unwrap(),
+        }
+    }
 }
 
 /// Gets the `less` command. The `-R` flag to support color in the

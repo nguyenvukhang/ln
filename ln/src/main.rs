@@ -1,6 +1,6 @@
 mod cmd;
 
-use cmd::SP;
+use cmd::{LogLine, SP};
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::Stdio;
@@ -22,20 +22,21 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W) {
         // entire line is just the graph visual.
         return writeln!(f, "{line}");
     };
-    let (sha, time, subj, refs) = cmd::parse_line(line);
-
-    if refs.len() > 3 {
-        write!(
-            f,
-            "{graph}\x1b[33m{sha} {G1}{{{refs}{G1}}} \x1b[m{subj} {G1}({G0}"
-        );
-    } else {
-        write!(f, "{graph}\x1b[33m{sha} \x1b[m{subj} {G1}({G0}");
-    }
+    let LogLine { sha, time, subj, refs } = LogLine::from(line);
 
     let (n, t) = time.split_once(' ').unwrap();
     let t = if t.starts_with("mo") { 'M' } else { t.chars().next().unwrap() };
-    writeln!(f, "{n}{t}{G1})\x1b[m");
+    if refs.len() > 3 {
+        writeln!(
+            f,
+            "{graph}\x1b[33m{sha} {G1}{{{refs}{G1}}} \x1b[m{subj} {G1}({G0}{n}{t}{G1})\x1b[m"
+        );
+    } else {
+        writeln!(
+            f,
+            "{graph}\x1b[33m{sha} \x1b[m{subj} {G1}({G0}{n}{t}{G1})\x1b[m"
+        );
+    }
 }
 
 // Gets the upper bound on number of lines to print on a bounded run.

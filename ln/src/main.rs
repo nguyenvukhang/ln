@@ -6,13 +6,12 @@ use crossterm::terminal;
 use std::io::{BufRead, BufReader, Write};
 use std::process::Stdio;
 
-macro_rules!write  {($f:ident,$($x:tt)+)=>{{let _=std::write  !($f,$($x),*);}}}
-macro_rules!writeln{($f:ident,$($x:tt)+)=>{{let _=std::writeln!($f,$($x),*);}}}
+macro_rules!write  {($f:ident,$($x:tt)+)=>{{let _=std::write  !($f,$($x)*);}}}
+macro_rules!writeln{($f:ident,$($x:tt)+)=>{{let _=std::writeln!($f,$($x)*);}}}
 
 const GRAY1: &str = "\x1b[38;5;240m";
 const GRAY0: &str = "\x1b[38;5;246m";
 
-static mut IS_BOUNDED: bool = false;
 const HEIGHT_RATIO: f32 = 0.6;
 
 /// parse for `sha`, `time`, `subject`, `refs`.
@@ -26,7 +25,7 @@ fn parse_line(line: &str) -> (&str, &str, &str, &str) {
 
 /// Prints one line in the `git log` output.
 #[inline]
-fn handle_git_log_stdout_line<W: Write>(line: &str, mut f: W) {
+fn print_git_log_line<W: Write>(line: &str, mut f: W) {
     let Some((graph, line)) = line.split_once(SP) else {
         // entire line is just the graph visual.
         return writeln!(f, "{line}");
@@ -59,25 +58,25 @@ fn bounded_run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
             Ok(0) | Err(_) => break,
             _ => buffer.trim_end(),
         };
-        handle_git_log_stdout_line(line, &mut target);
+        print_git_log_line(line, &mut target);
         j -= 1;
     }
 }
 
 /// Iterates over the git log and writes the outputs to `f`.
-fn run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
+fn run<R: BufRead, W: Write>(is_bounded: bool, mut log: R, mut target: W) {
     // No limit is specified (very hard-coded, such naive)
-    if unsafe { IS_BOUNDED } {
-        return bounded_run(git_log, target);
+    if is_bounded {
+        return bounded_run(log, target);
     }
     let mut buffer = String::with_capacity(256);
     loop {
         buffer.clear();
-        let line = match git_log.read_line(&mut buffer) {
+        let line = match log.read_line(&mut buffer) {
             Ok(0) | Err(_) => break,
             _ => buffer.trim_end(),
         };
-        handle_git_log_stdout_line(line, &mut target);
+        print_git_log_line(line, &mut target);
     }
 }
 
@@ -87,9 +86,10 @@ fn main() {
     let mut git_log = cmd::git_log();
     git_log.stdout(Stdio::piped());
 
+    let mut is_bounded = false;
     for arg in std::env::args_os().skip(1) {
         if arg == "--bound" {
-            unsafe { IS_BOUNDED = true }
+            is_bounded = true;
             continue;
         }
         git_log.arg(arg);
@@ -102,12 +102,12 @@ fn main() {
     match cmd::less().spawn() {
         Ok(mut less) => {
             // `less` found: pass the git log output to less.
-            run(git_log_r, less.stdin.take().unwrap());
+            run(is_bounded, git_log_r, less.stdin.take().unwrap());
             let _ = less.wait();
         }
         Err(_) => {
             // `less` not found: just run normal git log and print to stdout.
-            run(git_log_r, std::io::stdout());
+            run(is_bounded, git_log_r, std::io::stdout());
         }
     }
 }

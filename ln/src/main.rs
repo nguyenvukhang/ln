@@ -95,13 +95,19 @@ fn main() {
         git_log.arg(arg);
     }
 
-    let git_log = git_log.spawn().unwrap().stdout.take().unwrap();
-    let git_log = BufReader::new(git_log);
+    let mut git_log_p = git_log.spawn().unwrap(); // process
+    let git_log_s = git_log_p.stdout.take().unwrap(); // stdout
+    let git_log_r = BufReader::new(git_log_s); // reader
 
-    let Ok(mut less) = cmd::less().spawn() else {
-        return run(git_log, std::io::stdout());
-    };
-
-    run(git_log, less.stdin.take().unwrap());
-    let _ = less.wait();
+    match cmd::less().spawn() {
+        Ok(mut less) => {
+            // `less` found: pass the git log output to less.
+            run(git_log_r, less.stdin.take().unwrap());
+            let _ = less.wait();
+        }
+        Err(_) => {
+            // `less` not found: just run normal git log and print to stdout.
+            run(git_log_r, std::io::stdout());
+        }
+    }
 }

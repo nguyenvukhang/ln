@@ -5,9 +5,6 @@ use cmd::{LogLine, SP};
 use std::io::{BufRead, BufReader, Write};
 use std::process::Stdio;
 
-macro_rules!write  {($f:ident,$($x:tt)+)=>{{let _=std::write  !($f,$($x)*);}}}
-macro_rules!writeln{($f:ident,$($x:tt)+)=>{{let _=std::writeln!($f,$($x)*);}}}
-
 /// Gray 0 (lighter)
 const G0: &str = "\x1b[38;5;246m";
 /// Gray 1 (darker)
@@ -20,21 +17,20 @@ const HEIGHT_RATIO: f32 = 0.7;
 fn print_git_log_line<W: Write>(line: &str, mut f: W) {
     let Some((graph, line)) = line.split_once(SP) else {
         // entire line is just the graph visual.
-        return writeln!(f, "{line}");
+        return (_ = writeln!(f, "{line}"));
     };
-    let LogLine { sha, time, subj, refs } = LogLine::from(line);
+    let ll @ LogLine { sha, subj, refs, .. } = LogLine::from(line);
+    let (n, u) = ll.get_time();
 
-    let (n, t) = time.split_once(' ').unwrap();
-    let t = if t.starts_with("mo") { 'M' } else { t.chars().next().unwrap() };
     if refs.len() > 3 {
-        writeln!(
+        let _ = writeln!(
             f,
-            "{graph}\x1b[33m{sha} {G1}{{{refs}{G1}}} \x1b[m{subj} {G1}({G0}{n}{t}{G1})\x1b[m"
+            "{graph}\x1b[33m{sha} {G1}{{{refs}{G1}}} \x1b[m{subj} {G1}({G0}{n}{u}{G1})\x1b[m"
         );
     } else {
-        writeln!(
+        let _ = writeln!(
             f,
-            "{graph}\x1b[33m{sha} \x1b[m{subj} {G1}({G0}{n}{t}{G1})\x1b[m"
+            "{graph}\x1b[33m{sha} \x1b[m{subj} {G1}({G0}{n}{u}{G1})\x1b[m"
         );
     }
 }

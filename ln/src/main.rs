@@ -5,33 +5,29 @@ use cmd::{LogLine, SP};
 use std::io::{BufRead, BufReader, Write};
 use std::process::Stdio;
 
-/// Gray 0 (lighter)
-const G0: &str = "\x1b[38;5;246m";
-/// Gray 1 (darker)
-const G1: &str = "\x1b[38;5;240m";
-
 const HEIGHT_RATIO: f32 = 0.7;
+
+/// Light Gray.
+const L: &str = "\x1b[38;5;246m";
+
+/// Dark Gray.
+const D: &str = "\x1b[38;5;240m";
 
 /// Prints one line in the `git log` output.
 #[inline]
 fn print_git_log_line<W: Write>(line: &str, mut f: W) {
-    let Some((graph, line)) = line.split_once(SP) else {
+    macro_rules! w {($($x:tt)+)=>{{let _=std::writeln!(f,$($x)*);}}}
+    let Some((g, line)) = line.split_once(SP) else {
         // entire line is just the graph visual.
-        return (_ = writeln!(f, "{line}"));
+        return w!("{line}");
     };
     let ll @ LogLine { sha, subj, refs, .. } = LogLine::from(line);
     let (n, u) = ll.get_time();
 
     if refs.len() > 3 {
-        let _ = writeln!(
-            f,
-            "{graph}\x1b[33m{sha} {G1}{{{refs}{G1}}} \x1b[m{subj} {G1}({G0}{n}{u}{G1})\x1b[m"
-        );
+        w!("{g}\x1b[33m{sha} {D}{{{refs}{D}}} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
     } else {
-        let _ = writeln!(
-            f,
-            "{graph}\x1b[33m{sha} \x1b[m{subj} {G1}({G0}{n}{u}{G1})\x1b[m"
-        );
+        w!("{g}\x1b[33m{sha} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
     }
 }
 
@@ -88,3 +84,4 @@ fn main() {
         }
     }
 }
+// vim:fmr=<<,>>

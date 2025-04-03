@@ -13,15 +13,6 @@ const GRAY0: &str = "\x1b[38;5;246m";
 
 const HEIGHT_RATIO: f32 = 0.7;
 
-/// parse for `sha`, `time`, `subject`, `refs`.
-#[inline]
-fn parse_line(line: &str) -> (&str, &str, &str, &str) {
-    let (sha, line) = line.split_once(SP).unwrap();
-    let (time, line) = line.split_once(SP).unwrap();
-    let (subject, refs) = line.split_once(SP).unwrap();
-    (sha, time, subject, refs)
-}
-
 /// Prints one line in the `git log` output.
 #[inline]
 fn print_git_log_line<W: Write>(line: &str, mut f: W) {
@@ -29,7 +20,7 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W) {
         // entire line is just the graph visual.
         return writeln!(f, "{line}");
     };
-    let (sha, time, subject, refs) = parse_line(line);
+    let (sha, time, subject, refs) = cmd::parse_line(line);
 
     write!(f, "{graph}\x1b[33m{sha} ");
     if refs.len() > 3 {

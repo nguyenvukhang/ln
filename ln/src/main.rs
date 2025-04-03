@@ -1,7 +1,8 @@
 mod cmd;
 
-use cmd::{LogLine, SP};
+use cmd::{verified_shas, LogLine, SP};
 
+use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Write};
 use std::process::Stdio;
 
@@ -15,7 +16,11 @@ const D: &str = "\x1b[38;5;240m";
 
 /// Prints one line in the `git log` output.
 #[inline]
-fn print_git_log_line<W: Write>(line: &str, mut f: W) {
+fn print_git_log_line<W: Write>(
+    line: &str,
+    mut f: W,
+    verified: Option<&mut HashSet<String>>,
+) {
     macro_rules! w {($($x:tt)+)=>{{let _=std::writeln!(f,$($x)*);}}}
     let Some((g, line)) = line.split_once(SP) else {
         // entire line is just the graph visual.
@@ -24,11 +29,36 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W) {
     let ll @ LogLine { sha, subj, refs, .. } = LogLine::from(line);
     let (n, u) = ll.get_time();
 
-    if refs.len() > 3 {
-        w!("{g}\x1b[33m{sha} {D}{{{refs}{D}}} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
-    } else {
-        w!("{g}\x1b[33m{sha} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+    let Some(verified) = verified else {
+        if refs.len() > 3 {
+            w!("{g}\x1b[33m{sha} {D}{{{refs}{D}}} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+        } else {
+            w!("{g}\x1b[33m{sha} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+        }
+        return;
+    };
+    if let Some(v_sha_len) = verified.iter().next().map(|v| v.len()) {
+        if v_sha_len != sha.len() {
+            let mut buf = Vec::with_capacity(verified.len());
+            buf.extend(verified.drain());
+            buf.iter_mut().for_each(|v| v.truncate(sha.len()));
+            verified.extend(buf);
+        }
     }
+    if verified.contains(sha) {
+        if refs.len() > 3 {
+            w!("{g}\x1b[32m{sha} {D}{{{refs}{D}}} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+        } else {
+            w!("{g}\x1b[32m{sha} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+        }
+    } else {
+        if refs.len() > 3 {
+            w!("{g}\x1b[33m{sha} {D}{{{refs}{D}}} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+        } else {
+            w!("{g}\x1b[33m{sha} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+        }
+    }
+    // let x = verified.iter().next().map_or(sha.len())
 }
 
 // Gets the upper bound on number of lines to print on a bounded run.
@@ -42,13 +72,15 @@ fn run<R: BufRead, W: Write>(is_bounded: bool, mut log: R, mut target: W) {
     let mut buffer = String::with_capacity(256);
     let mut limit = if is_bounded { get_line_limit() } else { u32::MAX };
 
+    let mut verifieds = verified_shas();
+
     while limit > 0 {
         buffer.clear();
         let line = match log.read_line(&mut buffer) {
             Ok(0) | Err(_) => break,
             _ => buffer.trim_end(),
         };
-        print_git_log_line(line, &mut target);
+        print_git_log_line(line, &mut target, verifieds.as_mut());
         limit -= 1;
     }
 }
@@ -56,7 +88,6 @@ fn run<R: BufRead, W: Write>(is_bounded: bool, mut log: R, mut target: W) {
 /// Here, we operate under the assumption that we ARE using this in a
 /// tty context, and hence always have color on.
 fn main() {
-    println!("{:?}", cmd::git_dir());
     let mut git_log = cmd::git_log();
     git_log.stdout(Stdio::piped());
 

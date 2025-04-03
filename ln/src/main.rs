@@ -87,9 +87,12 @@ fn run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
 /// Gets the base `git log` command.
 fn git_log() -> Command {
     let mut git = Command::new("git");
-    git.args(["log", "--graph", "--color=always"]);
-    git.arg(FMT!("%h", "%ar", "%s", "%C(auto)%D"));
-    git.stdout(Stdio::piped());
+    git.args([
+        "log",
+        "--graph",
+        "--color=always",
+        FMT!("%h", "%ar", "%s", "%C(auto)%D"),
+    ]);
     git
 }
 
@@ -106,6 +109,7 @@ fn less() -> Command {
 /// tty context, and hence always have color on.
 fn main() {
     let mut sh_cmd = git_log();
+    sh_cmd.stdout(Stdio::piped());
 
     for arg in std::env::args_os().skip(1) {
         if arg == "--bound" {

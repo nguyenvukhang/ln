@@ -8,8 +8,10 @@ use std::process::Stdio;
 macro_rules!write  {($f:ident,$($x:tt)+)=>{{let _=std::write  !($f,$($x)*);}}}
 macro_rules!writeln{($f:ident,$($x:tt)+)=>{{let _=std::writeln!($f,$($x)*);}}}
 
-const GRAY1: &str = "\x1b[38;5;240m";
-const GRAY0: &str = "\x1b[38;5;246m";
+/// Gray 0 (lighter)
+const G0: &str = "\x1b[38;5;246m";
+/// Gray 1 (darker)
+const G1: &str = "\x1b[38;5;240m";
 
 const HEIGHT_RATIO: f32 = 0.7;
 
@@ -20,20 +22,20 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W) {
         // entire line is just the graph visual.
         return writeln!(f, "{line}");
     };
-    let (sha, time, subject, refs) = cmd::parse_line(line);
+    let (sha, time, subj, refs) = cmd::parse_line(line);
 
-    write!(f, "{graph}\x1b[33m{sha} ");
     if refs.len() > 3 {
-        write!(f, "{GRAY1}{{{refs}{GRAY1}}} ");
+        write!(
+            f,
+            "{graph}\x1b[33m{sha} {G1}{{{refs}{G1}}} \x1b[m{subj} {G1}({G0}"
+        );
+    } else {
+        write!(f, "{graph}\x1b[33m{sha} \x1b[m{subj} {G1}({G0}");
     }
-    write!(f, "\x1b[m{subject} {GRAY1}({GRAY0}");
-    {
-        let (n, t) = time.split_once(' ').unwrap();
-        let t =
-            if t.starts_with("mo") { 'M' } else { t.chars().next().unwrap() };
-        write!(f, "{n}{t}");
-    }
-    writeln!(f, "{GRAY1})\x1b[m");
+
+    let (n, t) = time.split_once(' ').unwrap();
+    let t = if t.starts_with("mo") { 'M' } else { t.chars().next().unwrap() };
+    writeln!(f, "{n}{t}{G1})\x1b[m");
 }
 
 // Gets the upper bound on number of lines to print on a bounded run.

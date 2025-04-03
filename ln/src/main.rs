@@ -2,7 +2,6 @@ mod cmd;
 
 use cmd::SP;
 
-use crossterm::terminal;
 use std::io::{BufRead, BufReader, Write};
 use std::process::Stdio;
 
@@ -12,7 +11,7 @@ macro_rules!writeln{($f:ident,$($x:tt)+)=>{{let _=std::writeln!($f,$($x)*);}}}
 const GRAY1: &str = "\x1b[38;5;240m";
 const GRAY0: &str = "\x1b[38;5;246m";
 
-const HEIGHT_RATIO: f32 = 0.6;
+const HEIGHT_RATIO: f32 = 0.7;
 
 /// parse for `sha`, `time`, `subject`, `refs`.
 #[inline]
@@ -46,37 +45,25 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W) {
     writeln!(f, "{GRAY1})\x1b[m");
 }
 
-/// Iterates over the git log and writes the outputs to `f`.
-fn bounded_run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
-    let (_, lines) = terminal::size().unwrap();
-    let mut j = (lines as f32 * HEIGHT_RATIO) as u16;
-    let mut buffer = String::with_capacity(256);
-
-    while j > 0 {
-        buffer.clear();
-        let line = match git_log.read_line(&mut buffer) {
-            Ok(0) | Err(_) => break,
-            _ => buffer.trim_end(),
-        };
-        print_git_log_line(line, &mut target);
-        j -= 1;
-    }
+// Gets the upper bound on number of lines to print on a bounded run.
+fn get_line_limit() -> u32 {
+    let (_, lines) = crossterm::terminal::size().unwrap();
+    (lines as f32 * HEIGHT_RATIO) as u32
 }
 
 /// Iterates over the git log and writes the outputs to `f`.
 fn run<R: BufRead, W: Write>(is_bounded: bool, mut log: R, mut target: W) {
-    // No limit is specified (very hard-coded, such naive)
-    if is_bounded {
-        return bounded_run(log, target);
-    }
     let mut buffer = String::with_capacity(256);
-    loop {
+    let mut limit = if is_bounded { get_line_limit() } else { u32::MAX };
+
+    while limit > 0 {
         buffer.clear();
         let line = match log.read_line(&mut buffer) {
             Ok(0) | Err(_) => break,
             _ => buffer.trim_end(),
         };
         print_git_log_line(line, &mut target);
+        limit -= 1;
     }
 }
 

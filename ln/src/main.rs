@@ -8,8 +8,12 @@ macro_rules!writeln{($f:ident,$($x:tt)+)=>{{let _=std::writeln!($f,$($x),*);}}}
 const GRAY1: &str = "\x1b[38;5;240m";
 const GRAY0: &str = "\x1b[38;5;246m";
 
+macro_rules! FMT {
+    ($($x:expr),*) => {
+        concat!("--format=", $("\u{2}", $x),*)
+    }
+}
 const SP: &str = "\u{2}";
-const FMT_ARGS: [&str; 4] = ["%h", "%ar", "%s", "%C(auto)%D"];
 
 static mut IS_BOUNDED: bool = false;
 const HEIGHT_RATIO: f32 = 0.6;
@@ -80,13 +84,11 @@ fn run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
     }
 }
 
-/// Gets the `git log` command. Forwards all arguments passed to this
-/// binary on to `git log`.
-fn git_log(args: Vec<String>) -> Command {
+/// Gets the base `git log` command.
+fn git_log() -> Command {
     let mut git = Command::new("git");
-    git.arg("log").args(args).arg("--graph");
-    git.arg(format!("--format={SP}{}", FMT_ARGS.join(SP)));
-    git.arg("--color=always");
+    git.args(["log", "--graph", "--color=always"]);
+    git.arg(FMT!("%h", "%ar", "%s", "%C(auto)%D"));
     git.stdout(Stdio::piped());
     git
 }
@@ -103,14 +105,16 @@ fn less() -> Command {
 /// Here, we operate under the assumption that we ARE using this in a
 /// tty context, and hence always have color on.
 fn main() {
-    let mut args = Vec::with_capacity(8);
-    for arg in std::env::args().skip(1) {
-        match arg.as_str() {
-            "--bound" => unsafe { IS_BOUNDED = true },
-            _ => args.push(arg),
+    let mut sh_cmd = git_log();
+
+    for arg in std::env::args_os().skip(1) {
+        if arg == "--bound" {
+            unsafe { IS_BOUNDED = true }
+            continue;
         }
+        sh_cmd.arg(arg);
     }
-    let git_log = git_log(args).spawn().unwrap().stdout.take().unwrap();
+    let git_log = sh_cmd.spawn().unwrap().stdout.take().unwrap();
     let git_log = BufReader::new(git_log);
 
     let Ok(mut less) = less().spawn() else {

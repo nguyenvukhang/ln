@@ -1,19 +1,16 @@
+mod cmd;
+
+use cmd::SP;
+
 use crossterm::terminal;
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 macro_rules!write  {($f:ident,$($x:tt)+)=>{{let _=std::write  !($f,$($x),*);}}}
 macro_rules!writeln{($f:ident,$($x:tt)+)=>{{let _=std::writeln!($f,$($x),*);}}}
 
 const GRAY1: &str = "\x1b[38;5;240m";
 const GRAY0: &str = "\x1b[38;5;246m";
-
-macro_rules! FMT {
-    ($($x:expr),*) => {
-        concat!("--format=", $("\u{2}", $x),*)
-    }
-}
-const SP: &str = "\u{2}";
 
 static mut IS_BOUNDED: bool = false;
 const HEIGHT_RATIO: f32 = 0.6;
@@ -84,44 +81,24 @@ fn run<R: BufRead, W: Write>(mut git_log: R, mut target: W) {
     }
 }
 
-/// Gets the base `git log` command.
-fn git_log() -> Command {
-    let mut git = Command::new("git");
-    git.args([
-        "log",
-        "--graph",
-        "--color=always",
-        FMT!("%h", "%ar", "%s", "%C(auto)%D"),
-    ]);
-    git
-}
-
-/// Gets the `less` command. The `-R` flag to support color in the
-/// output it scrolls. The `-F` flag tells `less` to quit if the
-/// content is less than that of one screen.
-fn less() -> Command {
-    let mut less = Command::new("less");
-    less.arg("-RF").stdin(Stdio::piped());
-    less
-}
-
 /// Here, we operate under the assumption that we ARE using this in a
 /// tty context, and hence always have color on.
 fn main() {
-    let mut sh_cmd = git_log();
-    sh_cmd.stdout(Stdio::piped());
+    let mut git_log = cmd::git_log();
+    git_log.stdout(Stdio::piped());
 
     for arg in std::env::args_os().skip(1) {
         if arg == "--bound" {
             unsafe { IS_BOUNDED = true }
             continue;
         }
-        sh_cmd.arg(arg);
+        git_log.arg(arg);
     }
-    let git_log = sh_cmd.spawn().unwrap().stdout.take().unwrap();
+
+    let git_log = git_log.spawn().unwrap().stdout.take().unwrap();
     let git_log = BufReader::new(git_log);
 
-    let Ok(mut less) = less().spawn() else {
+    let Ok(mut less) = cmd::less().spawn() else {
         return run(git_log, std::io::stdout());
     };
 

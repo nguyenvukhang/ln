@@ -58,7 +58,7 @@ pub struct LogLine<'a> {
 /// content is less than that of one screen.
 pub fn less() -> Command {
     let mut less = Command::new("less");
-    less.arg("-RF").stdin(Stdio::piped());
+    less.arg("-rF").stdin(Stdio::piped());
     less
 }
 

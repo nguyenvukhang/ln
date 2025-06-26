@@ -14,13 +14,12 @@ const L: &str = "\x1b[38;5;246m";
 /// Dark Gray.
 const D: &str = "\x1b[38;5;240m";
 
+/// Reset.
+const R: &str = "{R}";
+
 /// Prints one line in the `git log` output.
 #[inline]
-fn print_git_log_line<W: Write>(
-    line: &str,
-    mut f: W,
-    verified: Option<&mut HashSet<String>>,
-) {
+fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut HashSet<String>>) {
     macro_rules! w {($($x:tt)+)=>{{let _=std::writeln!(f,$($x)*);}}}
     let Some((g, line)) = line.split_once(SP) else {
         // entire line is just the graph visual.
@@ -29,14 +28,17 @@ fn print_git_log_line<W: Write>(
     let ll @ LogLine { sha, subj, refs, .. } = LogLine::from(line);
     let (n, u) = ll.get_time();
 
+    let has_ref = refs.len() > 3;
+
     let Some(verified) = verified else {
-        if refs.len() > 3 {
-            w!("{g}\x1b[33m{sha} {D}{{{refs}{D}}} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+        return if has_ref {
+            w!("{g}\x1b[33m{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
         } else {
-            w!("{g}\x1b[33m{sha} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
-        }
-        return;
+            w!("{g}\x1b[33m{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
+        };
     };
+
+    // Truncate all verified SHAs to match the currently displayed SHAs.
     if let Some(v_sha_len) = verified.iter().next().map(|v| v.len()) {
         if v_sha_len != sha.len() {
             let mut buf = Vec::with_capacity(verified.len());
@@ -45,17 +47,18 @@ fn print_git_log_line<W: Write>(
             verified.extend(buf);
         }
     }
+
     if verified.contains(sha) {
-        if refs.len() > 3 {
-            w!("{g}\x1b[32m{sha} {D}{{{refs}{D}}} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+        if has_ref {
+            w!("{g}\x1b[32m{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
         } else {
-            w!("{g}\x1b[32m{sha} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+            w!("{g}\x1b[32m{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
         }
     } else {
-        if refs.len() > 3 {
-            w!("{g}\x1b[33m{sha} {D}{{{refs}{D}}} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+        if has_ref {
+            w!("{g}\x1b[33m{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
         } else {
-            w!("{g}\x1b[33m{sha} \x1b[m{subj} {D}({L}{n}{u}{D})\x1b[m");
+            w!("{g}\x1b[33m{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
         }
     }
     // let x = verified.iter().next().map_or(sha.len())

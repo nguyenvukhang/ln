@@ -110,7 +110,8 @@ fn main() {
     match cmd::less().spawn() {
         Ok(mut less) => {
             // `less` found: pass the git log output to less.
-            run(is_bounded, git_log_r, less.stdin.take().unwrap());
+            let less_stdin = less.stdin.take().unwrap();
+            run(is_bounded, git_log_r, less_stdin);
             let _ = less.wait();
         }
         Err(_) => {

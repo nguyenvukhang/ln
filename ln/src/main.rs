@@ -1,6 +1,6 @@
 mod cmd;
 
-use cmd::{verified_shas, LogLine, SP};
+use cmd::*;
 
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Write};
@@ -19,7 +19,7 @@ const R: &str = "{R}";
 
 /// Prints one line in the `git log` output.
 #[inline]
-fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut HashSet<String>>) {
+fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut HashSet<&str>>) {
     macro_rules! w {($($x:tt)+)=>{{let _=std::writeln!(f,$($x)*);}}}
     let Some((g, line)) = line.split_once(SP) else {
         // entire line is just the graph visual.
@@ -40,10 +40,15 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut Hash
 
     // Truncate all verified SHAs to match the currently displayed SHAs.
     if let Some(v_sha_len) = verified.iter().next().map(|v| v.len()) {
-        if v_sha_len != sha.len() {
+        if v_sha_len < sha.len() {
+            // Verified SHA lengths should be the full 40 chars, while the displayed
+            // SHA lengths should be usually 7 or 8.
+            panic!("Impossible.");
+        }
+        if v_sha_len > sha.len() {
             let mut buf = Vec::with_capacity(verified.len());
             buf.extend(verified.drain());
-            buf.iter_mut().for_each(|v| v.truncate(sha.len()));
+            buf.iter_mut().for_each(|v| *v = &v[..sha.len()]);
             verified.extend(buf);
         }
     }
@@ -75,7 +80,8 @@ fn run<R: BufRead, W: Write>(is_bounded: bool, mut log: R, mut target: W) {
     let mut buffer = String::with_capacity(256);
     let mut limit = if is_bounded { get_line_limit() } else { u32::MAX };
 
-    let mut verifieds = verified_shas();
+    let verifieds_raw = verified_shas_raw();
+    let mut verifieds = verifieds_raw.as_ref().map(|v| verified_shas(v.as_str()));
 
     while limit > 0 {
         buffer.clear();

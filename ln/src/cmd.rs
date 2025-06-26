@@ -69,12 +69,11 @@ pub fn git_dir() -> PathBuf {
     PathBuf::from(std::str::from_utf8(&out.stdout).unwrap().trim())
 }
 
-pub fn verified_shas() -> Option<HashSet<String>> {
+pub fn verified_shas_raw() -> Option<String> {
     let v_file = git_dir().join(".verified");
-    let Ok(v_content) = std::fs::read_to_string(v_file) else { return None };
-    let mut set = HashSet::new();
-    for line in v_content.lines() {
-        set.insert(line.to_string());
-    }
-    Some(set)
+    std::fs::read_to_string(v_file).ok()
+}
+
+pub fn verified_shas(raw: &str) -> HashSet<&str> {
+    raw.lines().collect()
 }

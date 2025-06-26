@@ -14,8 +14,14 @@ const L: &str = "\x1b[38;5;246m";
 /// Dark Gray.
 const D: &str = "\x1b[38;5;240m";
 
+/// Green.
+const G: &str = "\x1b[32m";
+
+/// Yellow.
+const Y: &str = "\x1b[33m";
+
 /// Reset.
-const R: &str = "{R}";
+const R: &str = "\x1b[m";
 
 /// Prints one line in the `git log` output.
 #[inline]
@@ -32,9 +38,9 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut Hash
 
     let Some(verified) = verified else {
         return if has_ref {
-            w!("{g}\x1b[33m{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            w!("{g}{Y}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
         } else {
-            w!("{g}\x1b[33m{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            w!("{g}{Y}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
         };
     };
 
@@ -55,18 +61,17 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut Hash
 
     if verified.contains(sha) {
         if has_ref {
-            w!("{g}\x1b[32m{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            w!("{g}{G}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
         } else {
-            w!("{g}\x1b[32m{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            w!("{g}{G}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
         }
     } else {
         if has_ref {
-            w!("{g}\x1b[33m{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            w!("{g}{Y}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
         } else {
-            w!("{g}\x1b[33m{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            w!("{g}{Y}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
         }
     }
-    // let x = verified.iter().next().map_or(sha.len())
 }
 
 // Gets the upper bound on number of lines to print on a bounded run.

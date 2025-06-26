@@ -1,12 +1,17 @@
+MAKEFILE_PATH   := $(abspath $(lastword $(MAKEFILE_LIST)))
+MAKEFILE_DIR    := $(dir $(MAKEFILE_PATH))
+
+CARGO_DEBUG_DIR := $(MAKEFILE_DIR)target/debug
+
 current: bound
 
 debug:
 	cargo build
-	PATH=/Users/khang/repos/ln/ln/target/debug:$$PATH git -C ~/repos/math ln -n 200
+	PATH=$(CARGO_DEBUG_DIR):$$PATH git -C ~/repos/math ln -n 200
 
 bound:
 	cargo build
-	PATH=/Users/khang/repos/ln/ln/target/debug:$$PATH git -C ~/repos/math ln --bound
+	PATH=$(CARGO_DEBUG_DIR):$$PATH git -C ~/repos/math ln --bound
 
 install:
 	cargo install --locked --force --path .

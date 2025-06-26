@@ -1,6 +1,8 @@
+mod logline;
 mod cmd;
 
 use cmd::*;
+use logline::*;
 
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Write};
@@ -29,7 +31,7 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut Hash
     macro_rules! w {($($x:tt)+)=>{{let _=std::writeln!(f,$($x)*);}}}
     let Some((g, line)) = line.split_once(SP) else {
         // entire line is just the graph visual.
-        return w!("{line}");
+        return writeln!(f, "{line}").unwrap();
     };
     let ll @ LogLine { sha, subj, refs, .. } = LogLine::from(line);
     let (n, u) = ll.get_time();

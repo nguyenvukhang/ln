@@ -5,7 +5,7 @@ use cmd::*;
 use logline::*;
 
 use std::collections::HashSet;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, LineWriter, Write};
 use std::process::Stdio;
 
 const HEIGHT_RATIO: f32 = 0.7;
@@ -25,62 +25,34 @@ const Y: &str = "\x1b[33m";
 /// Reset.
 const R: &str = "\x1b[m";
 
-macro_rules! _writeln {
-    ($f:expr, $($x:tt)+) => {{
-        let _ = std::writeln!($f, $($x)*);
-    }}
-}
-
-/// Truncate all verified SHAs to match the currently displayed SHAs.
-fn truncate_verified_shas(verified: &mut HashSet<&str>, len: usize) {
-    let Some(v_sha_len) = verified.iter().next().map(|v| v.len()) else { return };
-    if v_sha_len < len {
-        // Verified SHA lengths should be the full 40 chars, while the displayed
-        // SHA lengths should be usually 7 or 8.
-        panic!("Impossible.");
-    }
-    if v_sha_len > len {
-        let mut buf = Vec::with_capacity(verified.len());
-        buf.extend(verified.drain());
-        buf.iter_mut().for_each(|v| *v = &v[..len]);
-        verified.extend(buf);
-    }
-}
+macro_rules! _write { ($f:expr, $($x:tt)+) => {{ let _ = std::write!($f, $($x)*); }}}
 
 /// Prints one line in the `git log` output.
-#[inline]
 fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut HashSet<&str>>) {
-    // entire line is just the graph visual.
-    let Some((g, line)) = line.split_once(SP) else { return _writeln!(f, "{line}") };
-
-    let ll @ LogLine { sha, subj, refs, .. } = LogLine::from(line);
-    let (n, u) = ll.get_time();
-
-    let has_ref = refs.len() > 3;
-
-    let Some(verified) = verified else {
-        return if has_ref {
-            _writeln!(f, "{g}{Y}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
-        } else {
-            _writeln!(f, "{g}{Y}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
-        };
+    let ll = match line.split_once(SP) {
+        Some((graph, line)) => {
+            _write!(f, "{graph}");
+            LogLine::from(line)
+        }
+        // entire line is just the graph visual.
+        None => return (_ = writeln!(f, "{line}")),
     };
 
-    truncate_verified_shas(verified, sha.len());
-
-    if verified.contains(sha) {
-        if has_ref {
-            _writeln!(f, "{g}{G}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
-        } else {
-            _writeln!(f, "{g}{G}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
-        }
+    // Write the SHA.
+    if ll.is_verified(verified) {
+        _write!(f, "{G}{}", ll.sha);
     } else {
-        if has_ref {
-            _writeln!(f, "{g}{Y}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
-        } else {
-            _writeln!(f, "{g}{Y}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
-        }
+        _write!(f, "{Y}{}", ll.sha);
     }
+
+    // Write the refs, if they exist
+    if ll.has_refs() {
+        _write!(f, " {D}{{{}{D}}}", ll.refs)
+    }
+
+    // Write the subject (commit message) and the timestamp.
+    let (n, u) = ll.get_time();
+    let _ = writeln!(f, " {R}{} {D}({L}{n}{u}{D}){R}", ll.subj);
 }
 
 // Gets the upper bound on number of lines to print on a bounded run.
@@ -131,12 +103,14 @@ fn main() {
         Ok(mut less) => {
             // `less` found: pass the git log output to less.
             let less_stdin = less.stdin.take().unwrap();
-            run(is_bounded, git_log_r, less_stdin);
+            let writer = LineWriter::new(less_stdin);
+            run(is_bounded, git_log_r, writer);
             let _ = less.wait();
         }
         Err(_) => {
             // `less` not found: just run normal git log and print to stdout.
-            run(is_bounded, git_log_r, std::io::stdout());
+            let writer = LineWriter::new(std::io::stdout());
+            run(is_bounded, git_log_r, writer);
         }
     }
 }

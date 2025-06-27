@@ -1,5 +1,5 @@
-mod logline;
 mod cmd;
+mod logline;
 
 use cmd::*;
 use logline::*;
@@ -25,14 +25,34 @@ const Y: &str = "\x1b[33m";
 /// Reset.
 const R: &str = "\x1b[m";
 
+macro_rules! _writeln {
+    ($f:expr, $($x:tt)+) => {{
+        let _ = std::writeln!($f, $($x)*);
+    }}
+}
+
+/// Truncate all verified SHAs to match the currently displayed SHAs.
+fn truncate_verified_shas(verified: &mut HashSet<&str>, len: usize) {
+    let Some(v_sha_len) = verified.iter().next().map(|v| v.len()) else { return };
+    if v_sha_len < len {
+        // Verified SHA lengths should be the full 40 chars, while the displayed
+        // SHA lengths should be usually 7 or 8.
+        panic!("Impossible.");
+    }
+    if v_sha_len > len {
+        let mut buf = Vec::with_capacity(verified.len());
+        buf.extend(verified.drain());
+        buf.iter_mut().for_each(|v| *v = &v[..len]);
+        verified.extend(buf);
+    }
+}
+
 /// Prints one line in the `git log` output.
 #[inline]
 fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut HashSet<&str>>) {
-    macro_rules! w {($($x:tt)+)=>{{let _=std::writeln!(f,$($x)*);}}}
-    let Some((g, line)) = line.split_once(SP) else {
-        // entire line is just the graph visual.
-        return writeln!(f, "{line}").unwrap();
-    };
+    // entire line is just the graph visual.
+    let Some((g, line)) = line.split_once(SP) else { return _writeln!(f, "{line}") };
+
     let ll @ LogLine { sha, subj, refs, .. } = LogLine::from(line);
     let (n, u) = ll.get_time();
 
@@ -40,38 +60,25 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut Hash
 
     let Some(verified) = verified else {
         return if has_ref {
-            w!("{g}{Y}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            _writeln!(f, "{g}{Y}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
         } else {
-            w!("{g}{Y}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            _writeln!(f, "{g}{Y}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
         };
     };
 
-    // Truncate all verified SHAs to match the currently displayed SHAs.
-    if let Some(v_sha_len) = verified.iter().next().map(|v| v.len()) {
-        if v_sha_len < sha.len() {
-            // Verified SHA lengths should be the full 40 chars, while the displayed
-            // SHA lengths should be usually 7 or 8.
-            panic!("Impossible.");
-        }
-        if v_sha_len > sha.len() {
-            let mut buf = Vec::with_capacity(verified.len());
-            buf.extend(verified.drain());
-            buf.iter_mut().for_each(|v| *v = &v[..sha.len()]);
-            verified.extend(buf);
-        }
-    }
+    truncate_verified_shas(verified, sha.len());
 
     if verified.contains(sha) {
         if has_ref {
-            w!("{g}{G}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            _writeln!(f, "{g}{G}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
         } else {
-            w!("{g}{G}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            _writeln!(f, "{g}{G}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
         }
     } else {
         if has_ref {
-            w!("{g}{Y}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            _writeln!(f, "{g}{Y}{sha} {D}{{{refs}{D}}} {R}{subj} {D}({L}{n}{u}{D}){R}");
         } else {
-            w!("{g}{Y}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
+            _writeln!(f, "{g}{Y}{sha} {R}{subj} {D}({L}{n}{u}{D}){R}");
         }
     }
 }
@@ -133,4 +140,3 @@ fn main() {
         }
     }
 }
-// vim:fmr=<<,>>

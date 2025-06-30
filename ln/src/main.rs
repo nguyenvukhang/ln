@@ -1,10 +1,10 @@
 mod cmd;
 mod logline;
+mod vlist;
 
-use cmd::*;
 use logline::*;
+use vlist::*;
 
-use std::collections::HashSet;
 use std::io::{self, BufRead, BufReader, LineWriter, Read, Write};
 use std::process::{Command, Stdio};
 
@@ -28,7 +28,7 @@ const R: &str = "\x1b[m";
 macro_rules! _write { ($f:expr, $($x:tt)+) => {{ let _ = std::write!($f, $($x)*); }}}
 
 /// Prints one line in the `git log` output.
-fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut HashSet<&str>>) {
+fn print_git_log_line<W: Write>(line: &str, mut f: W, vlist: &mut VList) {
     let ll = match line.split_once(SP) {
         Some((graph, line)) => {
             _write!(f, "{graph}");
@@ -39,7 +39,7 @@ fn print_git_log_line<W: Write>(line: &str, mut f: W, verified: Option<&mut Hash
     };
 
     // Write the SHA.
-    if ll.is_verified(verified) {
+    if vlist.contains(ll.sha) {
         _write!(f, "{G}{}", ll.sha);
     } else {
         _write!(f, "{Y}{}", ll.sha);
@@ -66,8 +66,8 @@ fn run<R: Read, W: Write>(is_bounded: bool, log: R, mut target: W) {
     let mut buffer = String::with_capacity(256);
     let mut limit = if is_bounded { get_line_limit() } else { u32::MAX };
 
-    let verifieds_raw = verified_shas_raw();
-    let mut verifieds = verifieds_raw.as_ref().map(|v| verified_shas(v.as_str()));
+    let vlist_raw = VList::raw();
+    let mut vlist = VList::new(vlist_raw.as_ref().map(|v| v.as_str()));
 
     let mut log = BufReader::new(log);
     while limit > 0 {
@@ -76,7 +76,7 @@ fn run<R: Read, W: Write>(is_bounded: bool, log: R, mut target: W) {
             Ok(0) | Err(_) => break,
             _ => buffer.trim_end(),
         };
-        print_git_log_line(line, &mut target, verifieds.as_mut());
+        print_git_log_line(line, &mut target, &mut vlist);
         limit -= 1;
     }
 }

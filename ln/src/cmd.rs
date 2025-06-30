@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
@@ -37,13 +36,4 @@ pub fn git_dir() -> Option<PathBuf> {
     let _out = git.args(["rev-parse", "--git-dir"]).output().ok()?;
     let _str = std::str::from_utf8(&_out.stdout).ok()?;
     Some(PathBuf::from(_str.trim()))
-}
-
-pub fn verified_shas_raw() -> Option<String> {
-    let v_file = git_dir()?.join(".verified");
-    std::fs::read_to_string(v_file).ok()
-}
-
-pub fn verified_shas(raw: &str) -> HashSet<&str> {
-    raw.lines().collect()
 }

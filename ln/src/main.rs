@@ -5,8 +5,8 @@ use cmd::*;
 use logline::*;
 
 use std::collections::HashSet;
-use std::io::{BufRead, BufReader, LineWriter, Write};
-use std::process::Stdio;
+use std::io::{self, BufRead, BufReader, LineWriter, Read, Write};
+use std::process::{Command, Stdio};
 
 const HEIGHT_RATIO: f32 = 0.7;
 
@@ -62,13 +62,14 @@ fn get_line_limit() -> u32 {
 }
 
 /// Iterates over the git log and writes the outputs to `f`.
-fn run<R: BufRead, W: Write>(is_bounded: bool, mut log: R, mut target: W) {
+fn run<R: Read, W: Write>(is_bounded: bool, log: R, mut target: W) {
     let mut buffer = String::with_capacity(256);
     let mut limit = if is_bounded { get_line_limit() } else { u32::MAX };
 
     let verifieds_raw = verified_shas_raw();
     let mut verifieds = verifieds_raw.as_ref().map(|v| verified_shas(v.as_str()));
 
+    let mut log = BufReader::new(log);
     while limit > 0 {
         buffer.clear();
         let line = match log.read_line(&mut buffer) {
@@ -80,9 +81,7 @@ fn run<R: BufRead, W: Write>(is_bounded: bool, mut log: R, mut target: W) {
     }
 }
 
-/// Here, we operate under the assumption that we ARE using this in a
-/// tty context, and hence always have color on.
-fn main() {
+fn parse_cli() -> (Command, bool) {
     let mut git_log = cmd::git_log();
     git_log.stdout(Stdio::piped());
 
@@ -95,22 +94,38 @@ fn main() {
         git_log.arg(arg);
     }
 
+    (git_log, is_bounded)
+}
+
+/// Here, we operate under the assumption that we ARE using this in a
+/// tty context, and hence always have color on.
+fn main() {
+    let (mut git_log, is_bounded) = parse_cli();
+
     let mut git_log_p = git_log.spawn().unwrap(); // process
-    let git_log_s = git_log_p.stdout.take().unwrap(); // stdout
-    let git_log_r = BufReader::new(git_log_s); // reader
+    let git_log_stdout = git_log_p.stdout.take().unwrap(); // stdout
+
+    // let f = std::fs::File::open("/Users/khang/repos/ln/ln/log.txt").unwrap();
+    // let git_log_r = BufReader::new(f);
+    //
+    // if "".is_empty() {
+    //     let mut f = std::fs::File::create("log.txt").unwrap();
+    //     for x in git_log_r.lines() {
+    //         let _ = (f.write(x.unwrap().as_bytes()), f.write(b"\n"));
+    //     }
+    //     return;
+    // }
 
     match cmd::less().spawn() {
         Ok(mut less) => {
             // `less` found: pass the git log output to less.
             let less_stdin = less.stdin.take().unwrap();
-            let writer = LineWriter::new(less_stdin);
-            run(is_bounded, git_log_r, writer);
+            run(is_bounded, git_log_stdout, LineWriter::new(less_stdin));
             let _ = less.wait();
         }
         Err(_) => {
             // `less` not found: just run normal git log and print to stdout.
-            let writer = LineWriter::new(std::io::stdout());
-            run(is_bounded, git_log_r, writer);
+            run(is_bounded, git_log_stdout, LineWriter::new(io::stdout()));
         }
     }
 }

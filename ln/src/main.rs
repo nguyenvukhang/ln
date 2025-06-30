@@ -105,17 +105,6 @@ fn main() {
     let mut git_log_p = git_log.spawn().unwrap(); // process
     let git_log_stdout = git_log_p.stdout.take().unwrap(); // stdout
 
-    // let f = std::fs::File::open("/Users/khang/repos/ln/ln/log.txt").unwrap();
-    // let git_log_r = BufReader::new(f);
-    //
-    // if "".is_empty() {
-    //     let mut f = std::fs::File::create("log.txt").unwrap();
-    //     for x in git_log_r.lines() {
-    //         let _ = (f.write(x.unwrap().as_bytes()), f.write(b"\n"));
-    //     }
-    //     return;
-    // }
-
     match cmd::less().spawn() {
         Ok(mut less) => {
             // `less` found: pass the git log output to less.

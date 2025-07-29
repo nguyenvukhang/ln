@@ -3,6 +3,7 @@
 use crate::cmd::git_dir;
 
 use std::collections::HashSet;
+use std::path::Path;
 
 /// Verified list of SHAs.
 pub struct VList<'a> {
@@ -18,7 +19,9 @@ impl<'a> VList<'a> {
     }
 
     pub fn raw() -> Option<String> {
-        let v_file = git_dir()?.join(".verified");
+        let _out = git_dir().output().ok()?;
+        let _str = core::str::from_utf8(&_out.stdout).ok()?;
+        let v_file = Path::new(_str).join(".verified");
         std::fs::read_to_string(v_file).ok()
     }
 

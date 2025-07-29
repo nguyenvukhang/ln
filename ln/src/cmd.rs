@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 macro_rules! FMT {
@@ -30,10 +29,9 @@ pub fn less() -> Command {
     less
 }
 
-/// Gets the base `git log` command.
-pub fn git_dir() -> Option<PathBuf> {
+/// Gets the path to the `.git` directory.
+pub fn git_dir() -> Command {
     let mut git = Command::new("git");
-    let _out = git.args(["rev-parse", "--git-dir"]).output().ok()?;
-    let _str = std::str::from_utf8(&_out.stdout).ok()?;
-    Some(PathBuf::from(_str.trim()))
+    git.args(["rev-parse", "--git-dir"]);
+    git
 }

@@ -5,8 +5,8 @@ mod vlist;
 use logline::*;
 use vlist::*;
 
-use std::io::{self, BufRead, BufReader, LineWriter, Read, Write};
-use std::process::{Command, Stdio};
+use std::io::{stdout, BufRead, BufReader, LineWriter, Write};
+use std::process::{ChildStdout, Command, Stdio};
 
 const HEIGHT_RATIO: f32 = 0.7;
 
@@ -62,7 +62,7 @@ fn get_line_limit() -> u32 {
 }
 
 /// Iterates over the git log and writes the outputs to `f`.
-fn run<R: Read, W: Write>(is_bounded: bool, log: R, mut target: W) {
+fn run<W: Write>(is_bounded: bool, log: ChildStdout, mut target: W) {
     let mut buffer = String::with_capacity(256);
     let mut limit = if is_bounded { get_line_limit() } else { u32::MAX };
 
@@ -114,7 +114,7 @@ fn main() {
         }
         Err(_) => {
             // `less` not found: just run normal git log and print to stdout.
-            run(is_bounded, git_log_stdout, LineWriter::new(io::stdout()));
+            run(is_bounded, git_log_stdout, LineWriter::new(stdout()));
         }
     }
 }

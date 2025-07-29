@@ -15,7 +15,7 @@ impl<'a> VList<'a> {
     /// Create a new verified list of SHAs from lines of text. Each line should
     /// be a SHA.
     pub fn new(text: Option<&'a str>) -> Self {
-        Self { set: text.map(|v| v.lines().collect()), len: 0 }
+        Self { set: text.map(|v| v.lines().collect()), len: 40 }
     }
 
     pub fn raw() -> Option<String> {

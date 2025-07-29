@@ -1,9 +1,3 @@
-macro_rules! next {
-    ($z:expr) => {
-        $z.next().unwrap()
-    };
-}
-
 pub struct LogLine<'a> {
     pub sha: &'a str,
     pub time: &'a str,
@@ -15,6 +9,7 @@ pub const SP: &str = "\u{2}";
 
 impl<'a> From<&'a str> for LogLine<'a> {
     fn from(z: &'a str) -> Self {
+        macro_rules!next{{$z:expr}=>{$z.next().unwrap()}}
         let mut z = z.split(SP);
         Self { sha: next!(z), time: next!(z), subj: next!(z), refs: next!(z) }
     }
